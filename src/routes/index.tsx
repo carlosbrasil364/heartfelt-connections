@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import {
   Clapperboard,
   Clock3,
@@ -79,6 +81,9 @@ function Index() {
   const [sceneImages, setSceneImages] = useState<Record<number, string>>({});
   const [voiceLoading, setVoiceLoading] = useState(false);
   const [voiceAudio, setVoiceAudio] = useState("");
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
 
   const generated = scenes.length > 0;
   const current = scenes[activeScene] ?? withIcons(fallbackScript(topic))[0];
@@ -175,7 +180,198 @@ function Index() {
     }
   };
 
-  const generateAiVoice = async () => {\n    const data = scenes.length ? scenes : withIcons(fallbackScript(topic));\n    const narration = data.map((scene) => scene.narration).join(" ");\n    if (!narration.trim()) return;\n    setVoiceLoading(true);\n    setError("");\n    try {\n      const voiceMap: Record<string, string> = { "Português (Brasil)": "marin", "Português (Portugal)": "cedar" };\n      const response = await fetch("/api/generate-voice", {\n        method: "POST",\n        headers: { "Content-Type": "application/json" },\n        body: JSON.stringify({ text: narration, voice: voiceMap[voice] ?? "marin", speed: Number(speed) }),\n      });\n      const data = (await response.json()) as { audio?: string; error?: string };\n      if (!response.ok || !data.audio) throw new Error(data.error || "Não foi possível gerar a narração IA.");\n      setVoiceAudio(data.audio);\n    } catch (err) {\n      setError(err instanceof Error ? err.message : "Erro ao gerar narração IA.");\n    } finally {\n      setVoiceLoading(false);\n    }\n  };\n\n  const speakCurrent = () => {
+  const generateAiVoice = async () => {\n    const data = scenes.length ? scenes : withIcons(fallbackScript(topic));\n    const narration = data.map((scene) => scene.narration).join(" ");\n    if (!narration.trim()) return;\n    setVoiceLoading(true);\n    setError("");\n    try {\n      const voiceMap: Record<string, string> = { "Português (Brasil)": "marin", "Português (Portugal)": "cedar" };\n      const response = await fetch("/api/generate-voice", {\n        method: "POST",\n        headers: { "Content-Type": "application/json" },\n        body: JSON.stringify({ text: narration, voice: voiceMap[voice] ?? "marin", speed: Number(speed) }),\n      });\n      const data = (await response.json()) as { audio?: string; error?: string };\n      if (!response.ok || !data.audio) throw new Error(data.error || "Não foi possível gerar a narração IA.");\n      setVoiceAudio(data.audio);\n    } catch (err) {\n      setError(err instanceof Error ? err.message : "Erro ao gerar narração IA.");\n    } finally {\n      setVoiceLoading(false);\n    }\n  };\n\n  const generateVideo = async () => {
+    if (!generated || videoLoading) return;
+    setVideoLoading(true);
+    setVideoProgress(0);
+    setError("");
+
+    let canvas: HTMLCanvasElement | null = null;
+    let recorder: MediaRecorder | null = null;
+    let animationFrame = 0;
+    let audioContext: AudioContext | null = null;
+
+    try {
+      const data = scenes;
+      const width = 720;
+      const height = 1280;
+      canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Não foi possível preparar o vídeo.");
+
+      const imageElements = await Promise.all(
+        data.map(async (_, index) => {
+          const src = sceneImages[index];
+          if (!src) return null;
+          const image = new Image();
+          image.src = src;
+          await new Promise<void>((resolve) => {
+            image.onload = () => resolve();
+            image.onerror = () => resolve();
+          });
+          return image;
+        }),
+      );
+
+      const canvasStream = canvas.captureStream(30);
+      const tracks = [...canvasStream.getVideoTracks()];
+      let audioDestination: MediaStreamAudioDestinationNode | null = null;
+      let voiceElement: HTMLAudioElement | null = null;
+
+      if (voiceAudio) {
+        audioContext = new AudioContext();
+        audioDestination = audioContext.createMediaStreamDestination();
+        voiceElement = new Audio(voiceAudio);
+        voiceElement.preload = "auto";
+        const voiceSource = audioContext.createMediaElementSource(voiceElement);
+        const voiceGain = audioContext.createGain();
+        voiceGain.gain.value = 0.95;
+        voiceSource.connect(voiceGain).connect(audioDestination);
+        voiceSource.connect(audioContext.destination);
+
+        const musicGain = audioContext.createGain();
+        musicGain.gain.value = 0.045;
+        const musicA = audioContext.createOscillator();
+        const musicB = audioContext.createOscillator();
+        musicA.type = "sine";
+        musicB.type = "sine";
+        musicA.frequency.value = 110;
+        musicB.frequency.value = 164.81;
+        musicA.connect(musicGain);
+        musicB.connect(musicGain);
+        musicGain.connect(audioDestination);
+        musicA.start();
+        musicB.start();
+        setTimeout(() => {
+          try { musicA.stop(); musicB.stop(); } catch {}
+        }, 60500);
+      }
+
+      if (audioDestination) {
+        audioDestination.stream.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
+      }
+
+      const mimeTypes = ["video/mp4;codecs=h264,aac", "video/webm;codecs=vp9,opus", "video/webm"];
+      const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
+      if (!mimeType) throw new Error("Seu navegador não suporta gravação de vídeo.");
+
+      recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 5_000_000 });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+
+      const recordingDone = new Promise<Blob>((resolve) => {
+        recorder!.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+      });
+
+      const startedAt = performance.now();
+      const draw = () => {
+        const elapsed = (performance.now() - startedAt) / 1000;
+        const sceneIndex = Math.min(data.length - 1, Math.floor((elapsed / 60) * data.length));
+        const scene = data[sceneIndex];
+        const image = imageElements[sceneIndex];
+
+        ctx.fillStyle = "#070708";
+        ctx.fillRect(0, 0, width, height);
+
+        if (image && image.naturalWidth) {
+          const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+          const iw = image.naturalWidth * scale;
+          const ih = image.naturalHeight * scale;
+          ctx.drawImage(image, (width - iw) / 2, (height - ih) / 2, iw, ih);
+          ctx.fillStyle = "rgba(0,0,0,0.48)";
+          ctx.fillRect(0, 0, width, height);
+        } else {
+          const gradient = ctx.createRadialGradient(width * 0.5, height * 0.35, 20, width * 0.5, height * 0.5, height * 0.7);
+          gradient.addColorStop(0, "rgba(150,20,20,0.32)");
+          gradient.addColorStop(1, "#050506");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, width, height);
+        }
+
+        ctx.fillStyle = "#ef4444";
+        ctx.font = "700 24px Arial";
+        ctx.fillText("DARK60S", 48, 70);
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.font = "500 18px Arial";
+        ctx.fillText(scene.time, width - 120, 70);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "900 48px Arial";
+        const words = scene.onScreen.split(" ");
+        let line = "";
+        let y = height * 0.66;
+        for (const word of words) {
+          const test = line ? line + " " + word : word;
+          if (ctx.measureText(test).width > width - 96) {
+            ctx.fillText(line, 48, y);
+            line = word;
+            y += 60;
+          } else line = test;
+        }
+        if (line) ctx.fillText(line, 48, y);
+
+        ctx.fillStyle = "rgba(255,255,255,0.72)";
+        ctx.font = "400 22px Arial";
+        const caption = scene.narration;
+        const captionLine = caption.length > 92 ? caption.slice(0, 89) + "..." : caption;
+        ctx.fillText(captionLine, 48, height - 100);
+
+        setVideoProgress(Math.min(99, Math.round((elapsed / 60) * 100)));
+        if (elapsed < 60) animationFrame = requestAnimationFrame(draw);
+      };
+
+      recorder.start(1000);
+      draw();
+
+      if (voiceElement && audioContext) {
+        await audioContext.resume();
+        void voiceElement.play();
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 60500));
+      cancelAnimationFrame(animationFrame);
+      recorder.stop();
+      const rawBlob = await recordingDone;
+
+      let finalBlob = rawBlob;
+      let extension = mimeType.includes("mp4") ? "mp4" : "webm";
+
+      if (extension !== "mp4") {
+        const ffmpeg = ffmpegRef.current ?? new FFmpeg();
+        ffmpegRef.current = ffmpeg;
+        if (!ffmpeg.loaded) {
+          const base = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+          await ffmpeg.load({
+            coreURL: await toBlobURL(base + "/ffmpeg-core.js", "text/javascript"),
+            wasmURL: await toBlobURL(base + "/ffmpeg-core.wasm", "application/wasm"),
+          });
+        }
+        await ffmpeg.writeFile("input.webm", await fetchFile(rawBlob));
+        await ffmpeg.exec(["-i", "input.webm", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "faststart", "output.mp4"]);
+        const output = await ffmpeg.readFile("output.mp4");
+        finalBlob = new Blob([output], { type: "video/mp4" });
+        extension = "mp4";
+      }
+
+      const url = URL.createObjectURL(finalBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "dark60s-video." + extension;
+      link.click();
+      URL.revokeObjectURL(url);
+      setVideoProgress(100);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível gerar o vídeo.");
+    } finally {
+      cancelAnimationFrame(animationFrame);
+      if (audioContext) await audioContext.close().catch(() => undefined);
+      setVideoLoading(false);
+    }
+  };
+
+  const speakCurrent = () => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(current.narration);
@@ -277,7 +473,7 @@ function Index() {
         <section className="border-t border-white/10 py-10">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div><div className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">Editor</div><h2 className="mt-2 text-2xl font-bold">{title || "Timeline de 60 segundos"}</h2>{hook && <p className="mt-2 max-w-2xl text-sm text-white/45">{hook}</p>}</div>
-            <div className="flex flex-wrap gap-2"><button onClick={() => void generateAiVoice()} disabled={voiceLoading || !generated} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Mic2 size={14} /> {voiceLoading ? "Gerando voz..." : "Gerar narração IA"}</button><button onClick={generateAllImages} disabled={!generated || imageLoading} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Image size={14} /> {imageLoading ? "Gerando imagens..." : "Gerar imagens IA"}</button><button onClick={downloadText} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><FileText size={14} /> Baixar roteiro</button><button onClick={downloadProject} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><Download size={14} /> Exportar projeto</button></div>
+            <div className="flex flex-wrap gap-2"><button onClick={() => void generateVideo()} disabled={videoLoading || !generated} className="flex items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-xs font-black hover:bg-red-600 disabled:opacity-50"><Film size={14} /> {videoLoading ? `Montando ${videoProgress}%` : "🔥 GERAR VÍDEO"}</button><button onClick={() => void generateAiVoice()} disabled={voiceLoading || !generated} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Mic2 size={14} /> {voiceLoading ? "Gerando voz..." : "Gerar narração IA"}</button><button onClick={generateAllImages} disabled={!generated || imageLoading} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Image size={14} /> {imageLoading ? "Gerando imagens..." : "Gerar imagens IA"}</button><button onClick={downloadText} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><FileText size={14} /> Baixar roteiro</button><button onClick={downloadProject} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><Download size={14} /> Exportar projeto</button></div>
           </div>
           <div className="mb-5 h-2 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-red-600 transition-all" style={{ width: `${generated ? progress : 0}%` }} /></div>
           <div className="grid gap-3 md:grid-cols-4">
