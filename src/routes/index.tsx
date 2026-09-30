@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { MetadataGenerator } from "@/components/MetadataGenerator";
 import { createFileRoute } from "@tanstack/react-router";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
