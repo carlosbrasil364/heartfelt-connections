@@ -75,6 +75,8 @@ function Index() {
   const [generatedAt, setGeneratedAt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [imageLoading, setImageLoading] = useState(false);
+  const [sceneImages, setSceneImages] = useState<Record<number, string>>({});
 
   const generated = scenes.length > 0;
   const current = scenes[activeScene] ?? withIcons(fallbackScript(topic))[0];
@@ -123,6 +125,51 @@ function Index() {
       setError(err instanceof Error ? `${err.message} Modo local ativado.` : "Modo local ativado.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateSceneImage = async (index: number) => {
+    const scene = scenes[index];
+    if (!scene) return;
+    setImageLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: scene.imagePrompt }),
+      });
+      const data = (await response.json()) as { image?: string; error?: string };
+      if (!response.ok || !data.image) throw new Error(data.error || "Não foi possível gerar a imagem.");
+      setSceneImages((currentImages) => ({ ...currentImages, [index]: data.image! }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao gerar imagem.");
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
+  const generateAllImages = async () => {
+    if (!scenes.length) return;
+    setImageLoading(true);
+    setError("");
+    const results: Record<number, string> = {};
+    try {
+      for (let index = 0; index < scenes.length; index += 1) {
+        const response = await fetch("/api/generate-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: scenes[index].imagePrompt }),
+        });
+        const data = (await response.json()) as { image?: string; error?: string };
+        if (!response.ok || !data.image) throw new Error(data.error || `Falha na cena ${index + 1}.`);
+        results[index] = data.image;
+        setSceneImages({ ...results });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao gerar imagens.");
+    } finally {
+      setImageLoading(false);
     }
   };
 
@@ -228,7 +275,7 @@ function Index() {
         <section className="border-t border-white/10 py-10">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div><div className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">Editor</div><h2 className="mt-2 text-2xl font-bold">{title || "Timeline de 60 segundos"}</h2>{hook && <p className="mt-2 max-w-2xl text-sm text-white/45">{hook}</p>}</div>
-            <div className="flex gap-2"><button onClick={downloadText} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><FileText size={14} /> Baixar roteiro</button><button onClick={downloadProject} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><Download size={14} /> Exportar projeto</button></div>
+            <div className="flex flex-wrap gap-2"><button onClick={generateAllImages} disabled={!generated || imageLoading} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Image size={14} /> {imageLoading ? "Gerando imagens..." : "Gerar imagens IA"}</button><button onClick={downloadText} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><FileText size={14} /> Baixar roteiro</button><button onClick={downloadProject} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><Download size={14} /> Exportar projeto</button></div>
           </div>
           <div className="mb-5 h-2 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-red-600 transition-all" style={{ width: `${generated ? progress : 0}%` }} /></div>
           <div className="grid gap-3 md:grid-cols-4">
@@ -242,6 +289,10 @@ function Index() {
         <section className="grid gap-5 border-t border-white/10 py-10 lg:grid-cols-[1.4fr_0.6fr]">
           <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
             <div className="flex items-center justify-between"><div><div className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">Cena {activeScene + 1}</div><h2 className="mt-2 text-xl font-bold">{current.title} · {current.time}</h2></div><button onClick={playing ? stopVoice : speakCurrent} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500">{playing ? <Pause size={14} /> : <Volume2 size={14} />} {playing ? "Parar" : "Ouvir"}</button></div>
+            <div className="mt-6 mb-5 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+              {sceneImages[activeScene] ? <img src={sceneImages[activeScene]} alt={`Imagem da cena ${activeScene + 1}`} className="aspect-video w-full object-cover" /> : <div className="flex min-h-32 items-center justify-center text-xs text-white/25"><Image size={18} className="mr-2" /> Gere a imagem desta cena</div>}
+            </div>
+            <button onClick={() => void generateSceneImage(activeScene)} disabled={imageLoading} className="mb-5 flex items-center gap-2 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-50"><Image size={14} /> {imageLoading ? "Gerando..." : "Gerar imagem desta cena"}</button>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-black/20 p-4"><div className="text-[10px] uppercase tracking-widest text-white/30">Narração</div><p className="mt-2 text-sm leading-6 text-white/70">{current.narration}</p></div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-4"><div className="text-[10px] uppercase tracking-widest text-white/30">Texto na tela</div><p className="mt-2 text-sm font-semibold text-white/80">{current.onScreen}</p></div>
@@ -257,7 +308,7 @@ function Index() {
             <label className="mt-5 block text-xs text-white/40">Velocidade da narração</label>
             <select value={speed} onChange={(event) => setSpeed(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm outline-none"><option value="0.85">0,85x</option><option value="1">1,0x</option><option value="1.15">1,15x</option><option value="1.3">1,3x</option></select>
             <div className="mt-6 rounded-xl border border-red-500/15 bg-red-500/5 p-4 text-xs leading-5 text-white/45">A voz atual usa o recurso do navegador. Na próxima etapa vamos conectar TTS profissional e gerar o áudio do projeto.</div>
-            <button onClick={() => { setScenes([]); setTitle(""); setHook(""); setActiveScene(0); setGeneratedAt(""); setError(""); stopVoice(); }} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-xs text-white/45 hover:bg-white/5"><RotateCcw size={14} /> Novo projeto</button>
+            <button onClick={() => { setScenes([]); setSceneImages({}); setTitle(""); setHook(""); setActiveScene(0); setGeneratedAt(""); setError(""); stopVoice(); }} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-xs text-white/45 hover:bg-white/5"><RotateCcw size={14} /> Novo projeto</button>
           </aside>
         </section>
 
