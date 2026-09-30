@@ -1,0 +1,17 @@
+name: Build check
+
+on:
+  push:
+    branches:
+      - main-build-check-20260930
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
