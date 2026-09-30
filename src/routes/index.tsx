@@ -180,7 +180,30 @@ function Index() {
     }
   };
 
-  const generateAiVoice = async () => {\n    const data = scenes.length ? scenes : withIcons(fallbackScript(topic));\n    const narration = data.map((scene) => scene.narration).join(" ");\n    if (!narration.trim()) return;\n    setVoiceLoading(true);\n    setError("");\n    try {\n      const voiceMap: Record<string, string> = { "Português (Brasil)": "marin", "Português (Portugal)": "cedar" };\n      const response = await fetch("/api/generate-voice", {\n        method: "POST",\n        headers: { "Content-Type": "application/json" },\n        body: JSON.stringify({ text: narration, voice: voiceMap[voice] ?? "marin", speed: Number(speed) }),\n      });\n      const data = (await response.json()) as { audio?: string; error?: string };\n      if (!response.ok || !data.audio) throw new Error(data.error || "Não foi possível gerar a narração IA.");\n      setVoiceAudio(data.audio);\n    } catch (err) {\n      setError(err instanceof Error ? err.message : "Erro ao gerar narração IA.");\n    } finally {\n      setVoiceLoading(false);\n    }\n  };\n\n  const generateVideo = async () => {
+  const generateAiVoice = async () => {
+    const data = scenes.length ? scenes : withIcons(fallbackScript(topic));
+    const narration = data.map((scene) => scene.narration).join(" ");
+    if (!narration.trim()) return;
+    setVoiceLoading(true);
+    setError("");
+    try {
+      const voiceMap: Record<string, string> = { "Português (Brasil)": "marin", "Português (Portugal)": "cedar" };
+      const response = await fetch("/api/generate-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: narration, voice: voiceMap[voice] ?? "marin", speed: Number(speed) }),
+      });
+      const data = (await response.json()) as { audio?: string; error?: string };
+      if (!response.ok || !data.audio) throw new Error(data.error || "Não foi possível gerar a narração IA.");
+      setVoiceAudio(data.audio);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao gerar narração IA.");
+    } finally {
+      setVoiceLoading(false);
+    }
+  };
+
+  const generateVideo = async () => {
     if (!generated || videoLoading) return;
     setVideoLoading(true);
     setVideoProgress(0);
