@@ -18,7 +18,7 @@ export const Route = createFileRoute("/api/generate-voice")({
             headers: gatewayHeaders(apiKey),
             body: JSON.stringify({
               model: "google/gemini-3.1-flash-tts-preview",
-              contents: [{ parts: [{ text: `Narre em português do Brasil, com voz grave, clara e cinematográfica, ritmo de documentário dark e suspense controlado: ${text}` }] }],
+              contents: [{ role: "user", parts: [{ text: `Narre em português do Brasil, com voz grave, clara e cinematográfica, ritmo de documentário dark e suspense controlado: ${text}` }] }],
               generationConfig: {
                 responseModalities: ["AUDIO"],
                 speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } } },
