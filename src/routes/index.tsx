@@ -8,7 +8,7 @@ import {
   Download,
   FileText,
   Film,
-  Image,
+  Image as ImageIcon,
   LoaderCircle,
   Mic2,
   Pause,
@@ -37,9 +37,9 @@ type Scene = {
 type AiScene = Omit<Scene, "icon">;
 type AiScript = { title: string; hook: string; scenes: AiScene[] };
 
-const sceneBlueprint = [
+const sceneBlueprint: { time: string; title: string; icon: typeof Sparkles }[] = [
   { time: "00–12s", title: "GANCHO", icon: Sparkles },
-  { time: "12–27s", title: "MISTÉRIO", icon: Image },
+  { time: "12–27s", title: "MISTÉRIO", icon: ImageIcon },
   { time: "27–45s", title: "REVELAÇÃO", icon: Film },
   { time: "45–60s", title: "CLIFFHANGER", icon: Clock3 },
 ];
@@ -86,7 +86,7 @@ function Index() {
   const ffmpegRef = useRef<FFmpeg | null>(null);
 
   const generated = scenes.length > 0;
-  const current = scenes[activeScene] ?? withIcons(fallbackScript(topic))[0];
+  const current = scenes[activeScene] ?? withIcons(fallbackScript(topic))[0]!;
   const status = loading ? "Criando com IA..." : generated ? "Roteiro pronto para edição" : "Pronto para criar";
 
   const progress = useMemo(
@@ -163,10 +163,12 @@ function Index() {
     const results: Record<number, string> = {};
     try {
       for (let index = 0; index < scenes.length; index += 1) {
+        const scenePrompt = scenes[index]?.imagePrompt;
+        if (!scenePrompt) continue;
         const response = await fetch("/api/generate-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: scenes[index].imagePrompt }),
+          body: JSON.stringify({ prompt: scenePrompt }),
         });
         const data = (await response.json()) as { image?: string; error?: string };
         if (!response.ok || !data.image) throw new Error(data.error || `Falha na cena ${index + 1}.`);
@@ -292,7 +294,7 @@ function Index() {
       const draw = () => {
         const elapsed = (performance.now() - startedAt) / 1000;
         const sceneIndex = Math.min(data.length - 1, Math.floor((elapsed / 60) * data.length));
-        const scene = data[sceneIndex];
+        const scene = data[sceneIndex]!;
         const image = imageElements[sceneIndex];
 
         ctx.fillStyle = "#070708";
@@ -374,7 +376,7 @@ function Index() {
         await ffmpeg.writeFile("input.webm", await fetchFile(rawBlob));
         await ffmpeg.exec(["-i", "input.webm", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "faststart", "output.mp4"]);
         const output = await ffmpeg.readFile("output.mp4");
-        finalBlob = new Blob([output], { type: "video/mp4" });
+        finalBlob = new Blob([output as unknown as BlobPart], { type: "video/mp4" });
         extension = "mp4";
       }
 
@@ -496,7 +498,7 @@ function Index() {
         <section className="border-t border-white/10 py-10">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div><div className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">Editor</div><h2 className="mt-2 text-2xl font-bold">{title || "Timeline de 60 segundos"}</h2>{hook && <p className="mt-2 max-w-2xl text-sm text-white/45">{hook}</p>}</div>
-            <div className="flex flex-wrap gap-2"><button onClick={() => void generateVideo()} disabled={videoLoading || !generated} className="flex items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-xs font-black hover:bg-red-600 disabled:opacity-50"><Film size={14} /> {videoLoading ? `Montando ${videoProgress}%` : "🔥 GERAR VÍDEO"}</button><button onClick={() => void generateAiVoice()} disabled={voiceLoading || !generated} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Mic2 size={14} /> {voiceLoading ? "Gerando voz..." : "Gerar narração IA"}</button><button onClick={generateAllImages} disabled={!generated || imageLoading} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Image size={14} /> {imageLoading ? "Gerando imagens..." : "Gerar imagens IA"}</button><button onClick={downloadText} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><FileText size={14} /> Baixar roteiro</button><button onClick={downloadProject} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><Download size={14} /> Exportar projeto</button></div>
+            <div className="flex flex-wrap gap-2"><button onClick={() => void generateVideo()} disabled={videoLoading || !generated} className="flex items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-xs font-black hover:bg-red-600 disabled:opacity-50"><Film size={14} /> {videoLoading ? `Montando ${videoProgress}%` : "🔥 GERAR VÍDEO"}</button><button onClick={() => void generateAiVoice()} disabled={voiceLoading || !generated} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Mic2 size={14} /> {voiceLoading ? "Gerando voz..." : "Gerar narração IA"}</button><button onClick={generateAllImages} disabled={!generated || imageLoading} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><ImageIcon size={14} /> {imageLoading ? "Gerando imagens..." : "Gerar imagens IA"}</button><button onClick={downloadText} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><FileText size={14} /> Baixar roteiro</button><button onClick={downloadProject} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><Download size={14} /> Exportar projeto</button></div>
           </div>
           <div className="mb-5 h-2 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-red-600 transition-all" style={{ width: `${generated ? progress : 0}%` }} /></div>
           <div className="grid gap-3 md:grid-cols-4">
@@ -511,9 +513,9 @@ function Index() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
             <div className="flex items-center justify-between"><div><div className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">Cena {activeScene + 1}</div><h2 className="mt-2 text-xl font-bold">{current.title} · {current.time}</h2></div><button onClick={playing ? stopVoice : speakCurrent} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500">{playing ? <Pause size={14} /> : <Volume2 size={14} />} {playing ? "Parar" : "Ouvir"}</button></div>
             <div className="mt-6 mb-5 overflow-hidden rounded-xl border border-white/10 bg-black/30">
-              {sceneImages[activeScene] ? <img src={sceneImages[activeScene]} alt={`Imagem da cena ${activeScene + 1}`} className="aspect-video w-full object-cover" /> : <div className="flex min-h-32 items-center justify-center text-xs text-white/25"><Image size={18} className="mr-2" /> Gere a imagem desta cena</div>}
+              {sceneImages[activeScene] ? <img src={sceneImages[activeScene]} alt={`Imagem da cena ${activeScene + 1}`} className="aspect-video w-full object-cover" /> : <div className="flex min-h-32 items-center justify-center text-xs text-white/25"><ImageIcon size={18} className="mr-2" /> Gere a imagem desta cena</div>}
             </div>
-            <button onClick={() => void generateSceneImage(activeScene)} disabled={imageLoading} className="mb-5 flex items-center gap-2 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-50"><Image size={14} /> {imageLoading ? "Gerando..." : "Gerar imagem desta cena"}</button>
+            <button onClick={() => void generateSceneImage(activeScene)} disabled={imageLoading} className="mb-5 flex items-center gap-2 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-50"><ImageIcon size={14} /> {imageLoading ? "Gerando..." : "Gerar imagem desta cena"}</button>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-black/20 p-4"><div className="text-[10px] uppercase tracking-widest text-white/30">Narração</div><p className="mt-2 text-sm leading-6 text-white/70">{current.narration}</p></div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-4"><div className="text-[10px] uppercase tracking-widest text-white/30">Texto na tela</div><p className="mt-2 text-sm font-semibold text-white/80">{current.onScreen}</p></div>

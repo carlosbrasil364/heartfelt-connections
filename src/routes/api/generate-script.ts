@@ -19,7 +19,7 @@ export const Route = createFileRoute("/api/generate-script")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env.OPENAI_API_KEY;
+        const apiKey = process.env['OPENAI_API_KEY'];
 
         if (!apiKey) {
           return Response.json({ error: "OPENAI_API_KEY não configurada no servidor." }, { status: 503 });
