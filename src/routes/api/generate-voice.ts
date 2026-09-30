@@ -1,42 +1,98 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { GATEWAY, gatewayErrorMessage, gatewayHeaders, passStatus } from "@/lib/gateway.server";
 
 export const Route = createFileRoute("/api/generate-voice")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env["LOVABLE_API_KEY"];
-        if (!apiKey) return Response.json({ error: "IA não configurada no servidor." }, { status: 503 });
+        const apiKey = process.env["OPENAI_API_KEY"];
+        if (!apiKey) {
+          return Response.json(
+            { error: "OPENAI_API_KEY não configurada no servidor." },
+            { status: 503 },
+          );
+        }
 
         try {
-          const body = (await request.json()) as { text?: string };
-          const text = body.text?.trim();
-          if (!text) return Response.json({ error: "Texto da narração obrigatório." }, { status: 400 });
+          const body = (await request.json()) as {
+            text?: string;
+            voice?: string;
+            speed?: number;
+          };
 
-          const response = await fetch(`${GATEWAY}/audio/speech`, {
+          const text = body.text?.trim();
+          if (!text) {
+            return Response.json(
+              { error: "Texto da narração obrigatório." },
+              { status: 400 },
+            );
+          }
+
+          const allowedVoices = new Set([
+            "alloy",
+            "ash",
+            "ballad",
+            "coral",
+            "echo",
+            "fable",
+            "nova",
+            "onyx",
+            "sage",
+            "shimmer",
+            "verse",
+            "marin",
+            "cedar",
+          ]);
+          const voice = allowedVoices.has(body.voice ?? "")
+            ? body.voice!
+            : "marin";
+          const speed = Math.min(
+            1.3,
+            Math.max(0.75, Number(body.speed) || 0.95),
+          );
+
+          const response = await fetch("https://api.openai.com/v1/audio/speech", {
             method: "POST",
-            headers: gatewayHeaders(apiKey),
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
             body: JSON.stringify({
-              model: "google/gemini-3.1-flash-tts-preview",
-              contents: [{ role: "user", parts: [{ text: `Narre em português do Brasil, com voz grave, clara e cinematográfica, ritmo de documentário dark e suspense controlado: ${text}` }] }],
-              generationConfig: {
-                responseModalities: ["AUDIO"],
-                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } } },
-              },
+              model: "gpt-4o-mini-tts",
+              voice,
+              input: text,
+              instructions:
+                "Fale em português do Brasil de forma natural e humana. " +
+                "É uma narração para um vídeo curto de suspense/documentário. " +
+                "Use voz adulta, grave e clara, mas sem exagerar no drama. " +
+                "Mantenha ritmo fluido, dicção natural e pausas curtas apenas onde a pontuação indicar. " +
+                "Não faça voz de locutor de rádio, não sussurre e não altere palavras ou pronúncias.",
+              response_format: "mp3",
+              speed,
             }),
           });
 
           if (!response.ok) {
-            console.error("TTS error:", response.status, await response.text());
-            return Response.json({ error: gatewayErrorMessage(response.status, "Não foi possível gerar a narração IA.") }, { status: passStatus(response.status) });
+            console.error(
+              "OpenAI TTS error:",
+              response.status,
+              await response.text(),
+            );
+            return Response.json(
+              { error: "Não foi possível gerar a narração IA." },
+              { status: 502 },
+            );
           }
 
           const buffer = Buffer.from(await response.arrayBuffer());
-          const mime = response.headers.get("content-type")?.split(";")[0] || "audio/wav";
-          return Response.json({ audio: `data:${mime};base64,${buffer.toString("base64")}` });
+          return Response.json({
+            audio: `data:audio/mpeg;base64,${buffer.toString("base64")}`,
+          });
         } catch (error) {
           console.error("Generate voice error:", error);
-          return Response.json({ error: "Erro ao gerar narração IA." }, { status: 500 });
+          return Response.json(
+            { error: "Erro ao gerar narração IA." },
+            { status: 500 },
+          );
         }
       },
     },
