@@ -37,12 +37,12 @@ type Scene = {
 type AiScene = Omit<Scene, "icon">;
 type AiScript = { title: string; hook: string; scenes: AiScene[] };
 
-const sceneBlueprint: { time: string; title: string; icon: typeof Sparkles }[] = [
+const sceneBlueprint = [
   { time: "00–12s", title: "GANCHO", icon: Sparkles },
   { time: "12–27s", title: "MISTÉRIO", icon: ImageIcon },
   { time: "27–45s", title: "REVELAÇÃO", icon: Film },
   { time: "45–60s", title: "CLIFFHANGER", icon: Clock3 },
-];
+] as const;
 
 function fallbackScript(topic: string): AiScript {
   const subject = topic.trim() || "um mistério que ninguém consegue explicar";
