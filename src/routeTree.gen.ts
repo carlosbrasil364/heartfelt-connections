@@ -10,33 +10,70 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiGenerateImageRouteImport } from './routes/api/generate-image'
+import { Route as ApiGenerateScriptRouteImport } from './routes/api/generate-script'
+import { Route as ApiGenerateVoiceRouteImport } from './routes/api/generate-voice'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGenerateImageRoute = ApiGenerateImageRouteImport.update({
+  id: '/api/generate-image',
+  path: '/api/generate-image',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGenerateScriptRoute = ApiGenerateScriptRouteImport.update({
+  id: '/api/generate-script',
+  path: '/api/generate-script',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGenerateVoiceRoute = ApiGenerateVoiceRouteImport.update({
+  id: '/api/generate-voice',
+  path: '/api/generate-voice',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/generate-image': typeof ApiGenerateImageRoute
+  '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/generate-voice': typeof ApiGenerateVoiceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/generate-image': typeof ApiGenerateImageRoute
+  '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/generate-voice': typeof ApiGenerateVoiceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/generate-image': typeof ApiGenerateImageRoute
+  '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/generate-voice': typeof ApiGenerateVoiceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    '/' | '/api/generate-image' | '/api/generate-script' | '/api/generate-voice'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    '/' | '/api/generate-image' | '/api/generate-script' | '/api/generate-voice'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/generate-image'
+    | '/api/generate-script'
+    | '/api/generate-voice'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiGenerateImageRoute: typeof ApiGenerateImageRoute
+  ApiGenerateScriptRoute: typeof ApiGenerateScriptRoute
+  ApiGenerateVoiceRoute: typeof ApiGenerateVoiceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +85,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/generate-image': {
+      id: '/api/generate-image'
+      path: '/api/generate-image'
+      fullPath: '/api/generate-image'
+      preLoaderRoute: typeof ApiGenerateImageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/generate-script': {
+      id: '/api/generate-script'
+      path: '/api/generate-script'
+      fullPath: '/api/generate-script'
+      preLoaderRoute: typeof ApiGenerateScriptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/generate-voice': {
+      id: '/api/generate-voice'
+      path: '/api/generate-voice'
+      fullPath: '/api/generate-voice'
+      preLoaderRoute: typeof ApiGenerateVoiceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiGenerateImageRoute: ApiGenerateImageRoute,
+  ApiGenerateScriptRoute: ApiGenerateScriptRoute,
+  ApiGenerateVoiceRoute: ApiGenerateVoiceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
