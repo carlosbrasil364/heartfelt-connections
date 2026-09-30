@@ -15,21 +15,65 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const scenes = [
+type Scene = {
+  time: string;
+  title: string;
+  text: string;
+  icon: typeof Sparkles;
+};
+
+const defaultScenes: Scene[] = [
   { time: "00–12s", title: "GANCHO", text: "Você sabia que existe uma história que quase ninguém conhece?", icon: Sparkles },
   { time: "12–27s", title: "MISTÉRIO", text: "Uma pista esquecida muda completamente o que parecia ser verdade.", icon: Image },
   { time: "27–45s", title: "REVELAÇÃO", text: "Agora, cada detalhe começa a fazer sentido — e o final se aproxima.", icon: Film },
   { time: "45–60s", title: "CLIFFHANGER", text: "Mas existe um último detalhe. E ele pode mudar tudo.", icon: Clock3 },
 ];
 
+function generateScenes(topic: string): Scene[] {
+  const subject = topic.trim() || "um mistério que ninguém consegue explicar";
+
+  return [
+    {
+      time: "00–12s",
+      title: "GANCHO",
+      text: `Você já ouviu falar de ${subject}? A história parece comum, mas existe um detalhe que quase ninguém conhece.`,
+      icon: Sparkles,
+    },
+    {
+      time: "12–27s",
+      title: "MISTÉRIO",
+      text: `Por muito tempo, ${subject} ficou cercado de perguntas. Pequenos detalhes começaram a levantar uma dúvida: o que realmente aconteceu?`,
+      icon: Image,
+    },
+    {
+      time: "27–45s",
+      title: "REVELAÇÃO",
+      text: "Quando juntamos as pistas, uma coisa chama atenção: a explicação mais óbvia não conta toda a história.",
+      icon: Film,
+    },
+    {
+      time: "45–60s",
+      title: "CLIFFHANGER",
+      text: "Mas a parte mais estranha vem agora. Uma última pista deixa uma pergunta sem resposta: será que ainda falta descobrir o principal?",
+      icon: Clock3,
+    },
+  ];
+}
+
 function Index() {
   const [topic, setTopic] = useState("");
-  const [generated, setGenerated] = useState(false);
+  const [scriptScenes, setScriptScenes] = useState<Scene[]>(defaultScenes);
+
+  const generated = scriptScenes !== defaultScenes;
 
   const status = useMemo(
     () => (generated ? "Roteiro pronto para edição" : "Pronto para criar"),
     [generated],
   );
+
+  const handleGenerate = () => {
+    setScriptScenes(generateScenes(topic));
+  };
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#070708] text-white">
@@ -70,11 +114,14 @@ function Index() {
                 <input
                   value={topic}
                   onChange={(event) => setTopic(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") handleGenerate();
+                  }}
                   placeholder="Ex.: O mistério do navio desaparecido"
                   className="min-h-12 flex-1 rounded-xl border border-white/10 bg-black/30 px-4 text-sm outline-none placeholder:text-white/25 focus:border-red-500/50"
                 />
                 <button
-                  onClick={() => setGenerated(true)}
+                  onClick={handleGenerate}
                   className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-bold transition hover:bg-red-500"
                 >
                   <Sparkles size={17} />
@@ -97,8 +144,12 @@ function Index() {
                   <span>9:16</span>
                 </div>
                 <div className="relative">
-                  <div className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-red-500">A verdade escondida</div>
-                  <div className="text-3xl font-black leading-none">E se tudo que você sabe estiver errado?</div>
+                  <div className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-red-500">
+                    {topic.trim() || "A verdade escondida"}
+                  </div>
+                  <div className="text-3xl font-black leading-none">
+                    {generated ? "E se tudo que você sabe estiver errado?" : "E se tudo que você sabe estiver errado?"}
+                  </div>
                   <div className="mt-4 h-1 w-16 rounded-full bg-red-600" />
                 </div>
                 <div className="relative flex items-center gap-3 rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-white/50">
@@ -121,7 +172,7 @@ function Index() {
           </div>
 
           <div className="grid gap-3 md:grid-cols-4">
-            {scenes.map((scene) => {
+            {scriptScenes.map((scene) => {
               const Icon = scene.icon;
               return (
                 <article key={scene.time} className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-red-500/30 hover:bg-white/[0.05]">
