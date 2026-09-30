@@ -77,6 +77,8 @@ function Index() {
   const [error, setError] = useState("");
   const [imageLoading, setImageLoading] = useState(false);
   const [sceneImages, setSceneImages] = useState<Record<number, string>>({});
+  const [voiceLoading, setVoiceLoading] = useState(false);
+  const [voiceAudio, setVoiceAudio] = useState("");
 
   const generated = scenes.length > 0;
   const current = scenes[activeScene] ?? withIcons(fallbackScript(topic))[0];
@@ -173,7 +175,7 @@ function Index() {
     }
   };
 
-  const speakCurrent = () => {
+  const generateAiVoice = async () => {\n    const data = scenes.length ? scenes : withIcons(fallbackScript(topic));\n    const narration = data.map((scene) => scene.narration).join(" ");\n    if (!narration.trim()) return;\n    setVoiceLoading(true);\n    setError("");\n    try {\n      const voiceMap: Record<string, string> = { "Português (Brasil)": "marin", "Português (Portugal)": "cedar" };\n      const response = await fetch("/api/generate-voice", {\n        method: "POST",\n        headers: { "Content-Type": "application/json" },\n        body: JSON.stringify({ text: narration, voice: voiceMap[voice] ?? "marin", speed: Number(speed) }),\n      });\n      const data = (await response.json()) as { audio?: string; error?: string };\n      if (!response.ok || !data.audio) throw new Error(data.error || "Não foi possível gerar a narração IA.");\n      setVoiceAudio(data.audio);\n    } catch (err) {\n      setError(err instanceof Error ? err.message : "Erro ao gerar narração IA.");\n    } finally {\n      setVoiceLoading(false);\n    }\n  };\n\n  const speakCurrent = () => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(current.narration);
@@ -275,7 +277,7 @@ function Index() {
         <section className="border-t border-white/10 py-10">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div><div className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">Editor</div><h2 className="mt-2 text-2xl font-bold">{title || "Timeline de 60 segundos"}</h2>{hook && <p className="mt-2 max-w-2xl text-sm text-white/45">{hook}</p>}</div>
-            <div className="flex flex-wrap gap-2"><button onClick={generateAllImages} disabled={!generated || imageLoading} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Image size={14} /> {imageLoading ? "Gerando imagens..." : "Gerar imagens IA"}</button><button onClick={downloadText} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><FileText size={14} /> Baixar roteiro</button><button onClick={downloadProject} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><Download size={14} /> Exportar projeto</button></div>
+            <div className="flex flex-wrap gap-2"><button onClick={() => void generateAiVoice()} disabled={voiceLoading || !generated} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Mic2 size={14} /> {voiceLoading ? "Gerando voz..." : "Gerar narração IA"}</button><button onClick={generateAllImages} disabled={!generated || imageLoading} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold hover:bg-red-500 disabled:opacity-50"><Image size={14} /> {imageLoading ? "Gerando imagens..." : "Gerar imagens IA"}</button><button onClick={downloadText} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><FileText size={14} /> Baixar roteiro</button><button onClick={downloadProject} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"><Download size={14} /> Exportar projeto</button></div>
           </div>
           <div className="mb-5 h-2 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-red-600 transition-all" style={{ width: `${generated ? progress : 0}%` }} /></div>
           <div className="grid gap-3 md:grid-cols-4">
@@ -307,8 +309,8 @@ function Index() {
             <select value={voice} onChange={(event) => setVoice(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm outline-none"><option>Português (Brasil)</option><option>Português (Portugal)</option></select>
             <label className="mt-5 block text-xs text-white/40">Velocidade da narração</label>
             <select value={speed} onChange={(event) => setSpeed(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm outline-none"><option value="0.85">0,85x</option><option value="1">1,0x</option><option value="1.15">1,15x</option><option value="1.3">1,3x</option></select>
-            <div className="mt-6 rounded-xl border border-red-500/15 bg-red-500/5 p-4 text-xs leading-5 text-white/45">A voz atual usa o recurso do navegador. Na próxima etapa vamos conectar TTS profissional e gerar o áudio do projeto.</div>
-            <button onClick={() => { setScenes([]); setSceneImages({}); setTitle(""); setHook(""); setActiveScene(0); setGeneratedAt(""); setError(""); stopVoice(); }} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-xs text-white/45 hover:bg-white/5"><RotateCcw size={14} /> Novo projeto</button>
+            <div className="mt-6 rounded-xl border border-red-500/15 bg-red-500/5 p-4 text-xs leading-5 text-white/45">A voz do navegador continua disponível para teste rápido. A narração IA usa uma voz neural e gera um áudio único para o vídeo de 60 segundos.</div>{voiceAudio && <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3"><div className="mb-2 text-[10px] uppercase tracking-widest text-white/30">Narração IA</div><audio controls src={voiceAudio} className="w-full" /><a href={voiceAudio} download="dark60s-narracao.mp3" className="mt-2 block text-center text-xs text-red-300 hover:text-red-200">Baixar MP3</a></div>}
+            <button onClick={() => { setScenes([]); setSceneImages({}); setVoiceAudio(""); setTitle(""); setHook(""); setActiveScene(0); setGeneratedAt(""); setError(""); stopVoice(); }} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-xs text-white/45 hover:bg-white/5"><RotateCcw size={14} /> Novo projeto</button>
           </aside>
         </section>
 
