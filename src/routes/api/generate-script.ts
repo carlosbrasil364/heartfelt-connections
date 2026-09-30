@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { gatewayErrorMessage, passStatus, streamResponseText } from "@/lib/gateway.server";
 
 type Scene = {
   time: string;
@@ -19,10 +20,10 @@ export const Route = createFileRoute("/api/generate-script")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env['OPENAI_API_KEY'];
+        const apiKey = process.env["LOVABLE_API_KEY"];
 
         if (!apiKey) {
-          return Response.json({ error: "OPENAI_API_KEY não configurada no servidor." }, { status: 503 });
+          return Response.json({ error: "IA não configurada no servidor." }, { status: 503 });
         }
 
         try {
@@ -33,86 +34,22 @@ export const Route = createFileRoute("/api/generate-script")({
             return Response.json({ error: "Informe um tema." }, { status: 400 });
           }
 
-          const response = await fetch("https://api.openai.com/v1/responses", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: "gpt-5.6-luna",
-              input: [
-                {
-                  role: "system",
-                  content: "Você é roteirista profissional de vídeos dark de 60 segundos em português do Brasil. Crie roteiros fortes e envolventes. Quando o tema for factual, não invente fatos apresentados como verdade. Responda somente JSON válido.",
-                },
-                {
-                  role: "user",
-                  content: `Crie um roteiro vertical 9:16 de exatamente 60 segundos sobre: ${topic}.
+          const result = await streamResponseText(
+            apiKey,
+            "Você é roteirista profissional de vídeos dark de 60 segundos em português do Brasil. Crie roteiros fortes e envolventes. Quando o tema for factual, não invente fatos apresentados como verdade. Responda somente JSON válido.",
+            `Crie um roteiro vertical 9:16 de exatamente 60 segundos sobre: ${topic}.
 
-Retorne exatamente este JSON:
-{
-  "title": "título curto",
-  "hook": "frase de impacto",
-  "scenes": [
-    {
-      "time": "00–12s",
-      "title": "GANCHO",
-      "narration": "narração natural para esta duração",
-      "visual": "descrição do que aparece na cena",
-      "onScreen": "texto curto na tela",
-      "imagePrompt": "prompt cinematográfico para imagem vertical 9:16"
-    },
-    {
-      "time": "12–27s",
-      "title": "MISTÉRIO",
-      "narration": "...",
-      "visual": "...",
-      "onScreen": "...",
-      "imagePrompt": "..."
-    },
-    {
-      "time": "27–45s",
-      "title": "REVELAÇÃO",
-      "narration": "...",
-      "visual": "...",
-      "onScreen": "...",
-      "imagePrompt": "..."
-    },
-    {
-      "time": "45–60s",
-      "title": "CLIFFHANGER",
-      "narration": "...",
-      "visual": "...",
-      "onScreen": "...",
-      "imagePrompt": "..."
-    }
-  ]
-}
+Retorne exatamente este JSON, com 4 cenas nesta ordem (00–12s GANCHO, 12–27s MISTÉRIO, 27–45s REVELAÇÃO, 45–60s CLIFFHANGER):
+{"title":"título curto","hook":"frase de impacto","scenes":[{"time":"00–12s","title":"GANCHO","narration":"narração natural para esta duração","visual":"descrição do que aparece na cena","onScreen":"texto curto na tela","imagePrompt":"prompt cinematográfico para imagem vertical 9:16"}]}
 
 Use frases curtas e ritmo de vídeo curto. Não use markdown.`,
-                },
-              ],
-            }),
-          });
+          );
 
-          if (!response.ok) {
-            console.error("OpenAI error:", await response.text());
-            return Response.json({ error: "A IA não conseguiu gerar o roteiro agora." }, { status: 502 });
+          if (!result.ok) {
+            return Response.json({ error: gatewayErrorMessage(result.status, "A IA não conseguiu gerar o roteiro agora.") }, { status: passStatus(result.status) });
           }
 
-          const payload = (await response.json()) as {
-            output_text?: string;
-            output?: Array<{ content?: Array<{ text?: string }> }>;
-          };
-
-          const text =
-            payload.output_text ??
-            payload.output?.flatMap((item) => item.content ?? []).map((item) => item.text ?? "").join("") ??
-            "";
-
-          const cleaned = text.replace(/^\s*```json\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-          const script = JSON.parse(cleaned) as ScriptResponse;
+          const script = JSON.parse(result.text) as ScriptResponse;
 
           if (!script.title || !script.hook || !Array.isArray(script.scenes) || script.scenes.length !== 4) {
             throw new Error("Formato de roteiro inválido.");
